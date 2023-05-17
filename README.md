@@ -14,3 +14,16 @@
 </p>
 </div>
 
+## Getting Start
+
+converter to coco
+```python
+python .\tools\x2coco.py --dataset_type voc --voc_anno_dir .\dataset\channel_transmission\ --voc_anno_list .\dataset\channel_transmission\train.txt --voc_label_list .\dataset\channel_transmission\label_list.txt --voc_out_name ./dataset/channel_transmission/annotations/train.json
+```
+```python
+python .\tools\x2coco.py --dataset_type voc --voc_anno_dir .\dataset\channel_transmission\ --voc_anno_list .\dataset\channel_transmission\valid.txt --voc_label_list .\dataset\channel_transmission\label_list.txt --voc_out_name ./dataset/channel_transmission/annotations/val.json
+```
+
+
+
+
