@@ -1,12 +1,13 @@
 import os
 import shutil
 import argparse
+import xml.dom.minidom as xmldom
+
 from sklearn.model_selection import train_test_split
 
 from ppdet.utils.logger import setup_logger
 
 logger = setup_logger('dataset prepare')
-
 
 
 def make_dataset_dir(dataset_root):
@@ -19,33 +20,6 @@ def make_dataset_dir(dataset_root):
     if not os.path.exists(annotations_dir):
         logger.info('making {} dir'.format(annotations_dir))
         os.mkdir(annotations_dir)
-    # vocdevkit_dir = os.path.join(voc_dir, 'VOCdevkit')
-    # voc2007 = os.path.join(vocdevkit_dir, 'VOC2007')
-    # annotations_dir = os.path.join(voc2007, 'Annotations')
-    # jpegimages_dir = os.path.join(voc2007, 'JPEGImages')
-    # imageset_dir = os.path.join(voc2007, 'ImageSets')
-    # main_dir = os.path.join(imageset_dir, 'Main')
-    # if not os.path.exists(voc_dir):
-    #     logger.info('making {} dir'.format(voc_dir))
-    #     os.mkdir(voc_dir)
-    # if not os.path.exists(vocdevkit_dir):
-    #     logger.info('making {} dir'.format(vocdevkit_dir))
-    #     os.mkdir(vocdevkit_dir)
-    # if not os.path.exists(voc2007):
-    #     logger.info('making {} dir'.format(voc2007))
-    #     os.mkdir(voc2007)
-    # if not os.path.exists(annotations_dir):
-    #     logger.info('making {} dir'.format(annotations_dir))
-    #     os.mkdir(annotations_dir)
-    # if not os.path.exists(jpegimages_dir):
-    #     logger.info('making {} dir'.format(jpegimages_dir))
-    #     os.mkdir(jpegimages_dir)
-    # if not os.path.exists(imageset_dir):
-    #     logger.info('making {} dir'.format(imageset_dir))
-    #     os.mkdir(imageset_dir)
-    # if not os.path.exists(main_dir):
-    #     logger.info('making {} dir'.format(main_dir))
-    #     os.mkdir(main_dir)
 
 def make_coco(voc_root):
     coco_dir = os.path.join(voc_root, 'coco')
@@ -73,6 +47,15 @@ def split_dataset(dataset_root, count=False, make_coco=False):
             xml_name = file_name.replace('.jpg', '.xml')
             xmls_list.append(xml_name)
 
+    for img_name, xml_name in zip(imgs_list, xmls_list):
+        xml_path = os.path.join(train_dir, xml_name)
+        xml_file = xmldom.parse(xml_path)
+        eles = xml_file.documentElement
+        eles.getElementsByTagName("filename")[0].firstChild.data = img_name
+        with open(xml_path, 'w', encoding='utf-8') as f:
+            xml_file.writexml(f, encoding='utf-8')
+    logger.info('xml filename correct!')
+
     if count:
         pass
 
@@ -97,8 +80,6 @@ def split_dataset(dataset_root, count=False, make_coco=False):
             xml_name = os.path.join('./annotations', xml_name)
             f.writelines(img_name + ' ' + xml_name + '\n')
 
-    # annotations_dir = os.path.join(voc_root, 'voc/VOCdevkit/VOC2007/Annotations')
-    # jpegimages_dir = os.path.join(voc_root, 'voc/VOCdevkit/VOC2007/JPEGImages')
     for img_name, xml_name in zip(imgs_list, xmls_list):
         img_path = os.path.join(train_dir, img_name)
         img_copy_to = os.path.join(data_root, 'images',img_name)
@@ -106,10 +87,6 @@ def split_dataset(dataset_root, count=False, make_coco=False):
         xml_copy_to = os.path.join(data_root, 'annotations', xml_name)
         shutil.copy(img_path, img_copy_to)
         shutil.copy(xml_path, xml_copy_to)
-    #     if make_coco:
-    #         coco_images_path = os.path.join(voc_root, 'coco/images')
-    #         img_copy_to = os.path.join(coco_images_path, img_name)
-    #         shutil.copy(img_path, img_copy_to)
     logger.info('VOC dataset has been done!')
 
 
@@ -134,8 +111,6 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     make_dataset_dir(args.dataset_root)
-    # if args.make_coco:
-    #     make_coco(args.voc_root)
     split_dataset(args.dataset_root, args.count, args.make_coco)
 
 
