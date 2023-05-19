@@ -1,6 +1,7 @@
 import os
 import shutil
 import argparse
+import cv2 as cv
 import xml.dom.minidom as xmldom
 
 from sklearn.model_selection import train_test_split
@@ -85,7 +86,40 @@ def split_dataset(dataset_root, count=False, make_coco=False):
         img_copy_to = os.path.join(data_root, 'images',img_name)
         xml_path = os.path.join(train_dir, xml_name)
         xml_copy_to = os.path.join(data_root, 'annotations', xml_name)
-        shutil.copy(img_path, img_copy_to)
+        img = cv.imread(img_path)
+        xml_file = xmldom.parse(xml_path)
+        eles = xml_file.documentElement
+        bndbox = eles.getElementsByTagName("object")[0].getElementsByTagName('bndbox')[0]
+        size = eles.getElementsByTagName("size")[0]
+        width = size.getElementsByTagName("width")[0].childNodes[0].data
+        height = size.getElementsByTagName("height")[0].childNodes[0].data
+        xmin = int(bndbox.getElementsByTagName('xmin')[0].childNodes[0].data)
+        ymin = int(bndbox.getElementsByTagName('ymin')[0].childNodes[0].data)
+        xmax = int(bndbox.getElementsByTagName('xmax')[0].childNodes[0].data)
+        ymax = int(bndbox.getElementsByTagName('ymax')[0].childNodes[0].data)
+        w = img.shape[1]
+        h = img.shape[0]
+        resize_ratio_w = w/1024
+        resize_ratio_h = h/1024
+        xmin = int(xmin/resize_ratio_w)
+        xmax = int(xmax/resize_ratio_w)
+        ymin = int(ymin/resize_ratio_h)
+        ymax = int(ymax/resize_ratio_h)
+        if img.shape[0] > 1024 and img.shape[1] > 1024:
+            img = cv.resize(img, (1024, 1024))
+            bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
+            bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = xmax
+            bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = ymin
+            bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
+            size.getElementsByTagName("width")[0].childNodes[0].data = 1024
+            size.getElementsByTagName("height")[0].childNodes[0].data = 1024
+            with open(xml_path, 'w', encoding='utf-8') as f:
+                xml_file.writexml(f, encoding='utf-8')
+            # cv.rectangle(img, (xmin, ymin), (xmax, ymax), color=(255, 0, 0))
+            # cv.imshow('img', img)
+            # cv.waitKey()
+        cv.imwrite(img_copy_to, img)
+        # shutil.copy(img_path, img_copy_to)
         shutil.copy(xml_path, xml_copy_to)
     logger.info('VOC dataset has been done!')
 
@@ -93,8 +127,9 @@ def split_dataset(dataset_root, count=False, make_coco=False):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "dataset_root",
+        "--dataset_root",
         type=str,
+        default='../dataset',
         help="Directory for images to perform inference on.")
     parser.add_argument(
         "--count",
