@@ -98,12 +98,12 @@ def split_dataset(dataset_root, count=False, make_coco=False):
         xmax = int(bndbox.getElementsByTagName('xmax')[0].childNodes[0].data)
         ymax = int(bndbox.getElementsByTagName('ymax')[0].childNodes[0].data)
         if xmin > xmax:
-            print(img_path)
+            logger.info('invalid xml file:{} xmin:{} while xmax:{}'.format(img_path, xmin, xmax))
             t = xmax
             xmax = xmin
             xmin = t
         if ymin > ymax:
-            print(img_path)
+            logger.info('invalid xml file:{} ymin:{} while ymax:{}'.format(img_path, ymin, ymax))
             t = ymax
             ymax = ymin
             ymin = t
