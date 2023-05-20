@@ -97,6 +97,16 @@ def split_dataset(dataset_root, count=False, make_coco=False):
         ymin = int(bndbox.getElementsByTagName('ymin')[0].childNodes[0].data)
         xmax = int(bndbox.getElementsByTagName('xmax')[0].childNodes[0].data)
         ymax = int(bndbox.getElementsByTagName('ymax')[0].childNodes[0].data)
+        if xmin > xmax:
+            print(img_path)
+            t = xmax
+            xmax = xmin
+            xmin = t
+        if ymin > ymax:
+            print(img_path)
+            t = ymax
+            ymax = ymin
+            ymin = t
         w = img.shape[1]
         h = img.shape[0]
         resize_ratio_w = w/1024
@@ -108,8 +118,8 @@ def split_dataset(dataset_root, count=False, make_coco=False):
         if img.shape[0] > 1024 and img.shape[1] > 1024:
             img = cv.resize(img, (1024, 1024))
             bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
-            bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = xmax
-            bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = ymin
+            bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
+            bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
             bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
             size.getElementsByTagName("width")[0].childNodes[0].data = 1024
             size.getElementsByTagName("height")[0].childNodes[0].data = 1024
