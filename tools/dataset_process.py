@@ -22,6 +22,7 @@ def make_dataset_dir(dataset_root):
         logger.info('making {} dir'.format(annotations_dir))
         os.mkdir(annotations_dir)
 
+
 def make_coco(voc_root):
     coco_dir = os.path.join(voc_root, 'coco')
     annotations_dir = os.path.join(coco_dir, 'annotations')
@@ -48,11 +49,15 @@ def split_dataset(dataset_root, count=False, make_coco=False):
             xml_name = file_name.replace('.jpg', '.xml')
             xmls_list.append(xml_name)
 
+    category_list = {'nest':[], 'kite':[], 'balloon':[], 'trash':[]}
     for img_name, xml_name in zip(imgs_list, xmls_list):
         xml_path = os.path.join(train_dir, xml_name)
         xml_file = xmldom.parse(xml_path)
         eles = xml_file.documentElement
         eles.getElementsByTagName("filename")[0].firstChild.data = img_name
+        object = eles.getElementsByTagName('object')[0]
+        category = object.getElementsByTagName('name')[0].childNodes[0].data
+        category_list[category].append(xml_file)
         with open(xml_path, 'w', encoding='utf-8') as f:
             xml_file.writexml(f, encoding='utf-8')
     logger.info('xml filename correct!')
@@ -60,14 +65,36 @@ def split_dataset(dataset_root, count=False, make_coco=False):
     if count:
         pass
 
-    img_train, img_val, xml_train, xml_val = train_test_split(imgs_list, xmls_list, test_size=0.1)
+    logger.info('nest category number : {}'.format(len(category_list['nest'])))
+    logger.info('kite category number : {}'.format(len(category_list['kite'])))
+    logger.info('balloon category number : {}'.format(len(category_list['balloon'])))
+    logger.info('trash category number : {}'.format(len(category_list['trash'])))
+    val_category_num = {'nest':int(len(category_list['nest']) * 0.1),
+                        'kite':int(len(category_list['kite']) * 0.1),
+                        'balloon':int(len(category_list['kite']) * 0.1),
+                        'trash':int(len(category_list['trash']) * 0.1)}
+    img_train, img_val, xml_train, xml_val = [], [], [], []
+    for img_name, xml_name in zip(imgs_list, xmls_list):
+        xml_path = os.path.join(train_dir, xml_name)
+        xml_file = xmldom.parse(xml_path)
+        eles = xml_file.documentElement
+        object = eles.getElementsByTagName('object')[0]
+        category = object.getElementsByTagName('name')[0].childNodes[0].data
+        if val_category_num[category]:
+            val_category_num[category] = val_category_num[category] - 1
+            img_val.append(img_name)
+            xml_val.append(xml_name)
+        else:
+            img_train.append(img_name)
+            xml_train.append(xml_name)
+
+    # img_train, img_val, xml_train, xml_val = train_test_split(imgs_list, xmls_list, test_size=0.1)
     logger.info('spilt train dataset ------ number:{}'.format(len(img_train)))
     logger.info('spilt val dataset ------ number:{}'.format(len(img_val)))
-    # main_dir = os.path.join(voc_root, 'voc','VOCdevkit', 'VOC2007', 'ImageSets', 'Main')
+    # # main_dir = os.path.join(voc_root, 'voc','VOCdevkit', 'VOC2007', 'ImageSets', 'Main')
     data_root = os.path.join(dataset_root, 'channel_transmission')
     train_txt_path = os.path.join(data_root, 'train.txt')
     val_txt_path = os.path.join(data_root, 'valid.txt')
-
 
     with open(train_txt_path, 'w+') as f:
         for img_name, xml_name in zip(img_train, xml_train):
@@ -83,7 +110,7 @@ def split_dataset(dataset_root, count=False, make_coco=False):
 
     for img_name, xml_name in zip(imgs_list, xmls_list):
         img_path = os.path.join(train_dir, img_name)
-        img_copy_to = os.path.join(data_root, 'images',img_name)
+        img_copy_to = os.path.join(data_root, 'images', img_name)
         xml_path = os.path.join(train_dir, xml_name)
         xml_copy_to = os.path.join(data_root, 'annotations', xml_name)
         img = cv.imread(img_path)
@@ -113,12 +140,12 @@ def split_dataset(dataset_root, count=False, make_coco=False):
             bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
             w = img.shape[1]
             h = img.shape[0]
-            resize_ratio_w = w/1024
-            resize_ratio_h = h/1024
-            xmin = int(xmin/resize_ratio_w)
-            xmax = int(xmax/resize_ratio_w)
-            ymin = int(ymin/resize_ratio_h)
-            ymax = int(ymax/resize_ratio_h)
+            resize_ratio_w = w / 1024
+            resize_ratio_h = h / 1024
+            xmin = int(xmin / resize_ratio_w)
+            xmax = int(xmax / resize_ratio_w)
+            ymin = int(ymin / resize_ratio_h)
+            ymax = int(ymax / resize_ratio_h)
             if img.shape[0] > 1024 and img.shape[1] > 1024:
                 bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
                 bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
@@ -161,7 +188,3 @@ if __name__ == '__main__':
     args = parse_args()
     make_dataset_dir(args.dataset_root)
     split_dataset(args.dataset_root, args.count, args.make_coco)
-
-
-
-
