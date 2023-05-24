@@ -163,6 +163,10 @@ def cocoapi_eval(jsonfile,
             style + '_pr_curve'))
     # flush coco evaluation result
     sys.stdout.flush()
+    precision = coco_eval.stats[0]
+    recall = coco_eval.stats[8]
+    f1_score = (2*precision*recall) / (precision+recall)
+    logger.info('IoU=0.50:0.95 ---------> f1_score:{}'.format(f1_score))
     return coco_eval.stats
 
 

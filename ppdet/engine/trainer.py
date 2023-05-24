@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import os
 import sys
+import json
 import copy
 import time
 from tqdm import tqdm
@@ -920,15 +921,29 @@ class Trainer(object):
                 draw_threshold=0.5,
                 output_dir='output',
                 save_results=False,
-                visualize=True):
+                visualize=True,
+                img2ID=None,
+                submit_dir='submit'):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+        if not os.path.exists(submit_dir):
+            os.makedirs(submit_dir)
 
         self.dataset.set_images(images)
         loader = create('TestReader')(self.dataset, 0)
 
         imid2path = self.dataset.get_imid2path()
+        if img2ID is not None:
+            imagepath2id = {}
+            with open(img2ID, 'r') as f:
+                for line in f.readlines():
+                    line = line.strip('\n')
+                    file_name = line[-43:-3]
+                    id = line[8:19]
+                    imagepath2id[file_name] = int(id)
 
+        else:
+            assert 'without img2ID file!'
         def setup_metrics_for_loader():
             # mem
             metrics = copy.deepcopy(self._metrics)
@@ -1005,6 +1020,8 @@ class Trainer(object):
             _m.accumulate()
             _m.reset()
 
+        json_results = []
+
         if visualize:
             for outs in results:
                 batch_res = get_infer_results(outs, clsid2catid)
@@ -1013,6 +1030,8 @@ class Trainer(object):
                 start = 0
                 for i, im_id in enumerate(outs['im_id']):
                     image_path = imid2path[int(im_id)]
+                    image_name = image_path[image_path.rfind('\\')+1:]
+                    image_name = image_name.replace('.jpg', '')
                     image = Image.open(image_path).convert('RGB')
                     image = ImageOps.exif_transpose(image)
                     self.status['original_image'] = np.array(image.copy())
@@ -1028,6 +1047,28 @@ class Trainer(object):
                             if 'keypoint' in batch_res else None
                     pose3d_res = batch_res['pose3d'][start:end] \
                             if 'pose3d' in batch_res else None
+                    bbox_id = 0
+                    for dt in np.array(bbox_res):
+                        if im_id != dt['image_id']:
+                            continue
+                        catid, bbox, score = dt['category_id'], dt['bbox'], dt['score']
+                        if score < draw_threshold:
+                            continue
+                        x, y, w, h = bbox
+                        # xcenter = xmin + w/2
+                        # ycenter = ymin + h/2
+                        area = w*h
+                        json_dict = {
+                            'iscrowd':0,
+                            'id':bbox_id,
+                            'image_id':imagepath2id[image_name],
+                            'category_id':int(catid)+1,
+                            'bbox':[x, y, w, h],
+                            'score': 1,
+                            'area':area
+                        }
+                        json_results.append(json_dict)
+                        bbox_id = bbox_id + 1
                     image = visualize_results(
                         image, bbox_res, mask_res, segm_res, keypoint_res,
                         pose3d_res, int(im_id), catid2name, draw_threshold)
@@ -1042,6 +1083,11 @@ class Trainer(object):
                     image.save(save_name, quality=95)
 
                     start = end
+        # sort json
+        json_results = sorted(json_results, key=lambda x:x['image_id'])
+        with open(os.path.join(submit_dir, 'results.json'), 'w+', encoding='utf-8') as f:
+            json.dump(json_results,f)
+
         return results
 
     def _get_save_image_name(self, output_dir, image_path):

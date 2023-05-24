@@ -43,9 +43,19 @@ logger = setup_logger('train')
 def parse_args():
     parser = ArgsParser()
     parser.add_argument(
+        "--imagepath2id",
+        type=str,
+        default='../dataset/val/val_imgID.txt',
+        help="model weights.")
+    parser.add_argument(
+        "--weights",
+        type=str,
+        default='../best_model.pdparams',
+        help="model weights.")
+    parser.add_argument(
         "--infer_dir",
         type=str,
-        default=None,
+        default='../dataset/val/val',
         help="Directory for images to perform inference on.")
     parser.add_argument(
         "--infer_img",
@@ -55,12 +65,17 @@ def parse_args():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="output",
+        default="../output",
         help="Directory for storing the output visualization files.")
+    parser.add_argument(
+        "--submit_output_dir",
+        type=str,
+        default="../submit",
+        help="Directory for storing the submit files.")
     parser.add_argument(
         "--draw_threshold",
         type=float,
-        default=0.5,
+        default=0.2,
         help="Threshold to reserve the result for visualization.")
     parser.add_argument(
         "--slim_config",
@@ -158,7 +173,6 @@ def get_test_images(infer_dir, infer_img):
 def run(FLAGS, cfg):
     # build trainer
     trainer = Trainer(cfg, mode='test')
-
     # load weights
     trainer.load_weights(cfg.weights)
 
@@ -184,7 +198,9 @@ def run(FLAGS, cfg):
             draw_threshold=FLAGS.draw_threshold,
             output_dir=FLAGS.output_dir,
             save_results=FLAGS.save_results,
-            visualize=FLAGS.visualize)
+            visualize=FLAGS.visualize,
+            img2ID=FLAGS.imagepath2id,
+            submit_dir=FLAGS.submit_output_dir)
 
 
 def main():

@@ -46,8 +46,6 @@ SUPPORT_MODELS = {
     'PPLCNet', 'DETR', 'CenterTrack'
 }
 
-TUNED_TRT_DYNAMIC_MODELS = {'DETR'}
-
 
 def bench_log(detector, img_list, model_info, batch_size=1, name=None):
     mems = {
@@ -445,7 +443,7 @@ class Detector(object):
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
         out_path = os.path.join(self.output_dir, video_out_name)
-        fourcc = cv2.VideoWriter_fourcc(* 'mp4v')
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         writer = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
         index = 1
         while (1):
@@ -470,6 +468,17 @@ class Detector(object):
         writer.release()
 
     def save_coco_results(self, image_list, results, use_coco_category=False):
+        fr = open('dataset/val/val_imgID.txt', 'r')
+        dic = {}
+        keys = [] # 用来存储读取的顺序
+        for line in fr:
+            v = line.strip().split(',')
+            item_1 = v[0].strip().split(":")
+            item_2 = v[1].strip().split(":")
+            dic[item_2[1][2:-1]] = item_1[1][1:]
+            keys.append(item_2[1][2:-1])
+        fr.close()
+
         bbox_results = []
         mask_results = []
         idx = 0
@@ -481,16 +490,35 @@ class Detector(object):
             else:
                 img_id = i
 
+            name = file_name[:-4]
+
+            # if 'boxes' in results:
+                # boxes = results['boxes'][idx:idx + box_num].tolist()
+                # bbox_results.extend([{
+                #     'image_id': img_id,
+                #     'category_id': coco_clsid2catid[int(box[0])] \
+                #         if use_coco_category else int(box[0]),
+                #     'file_name': file_name,
+                #     'bbox': [box[2], box[3], box[4] - box[2],
+                #          box[5] - box[3]],  # xyxy -> xywh
+                #     'score': box[1]} for box in boxes])
+                                # boxes = results['boxes'][idx:idx + box_num].tolist()
             if 'boxes' in results:
                 boxes = results['boxes'][idx:idx + box_num].tolist()
-                bbox_results.extend([{
-                    'image_id': img_id,
-                    'category_id': coco_clsid2catid[int(box[0])] \
-                        if use_coco_category else int(box[0]),
-                    'file_name': file_name,
-                    'bbox': [box[2], box[3], box[4] - box[2],
-                         box[5] - box[3]],  # xyxy -> xywh
-                    'score': box[1]} for box in boxes])
+                for i, box in enumerate(boxes):
+                    if box[1] > 0.5:
+                        bbox_results.extend([{
+                            "iscrowd": 0,
+                            'id': i,
+                            # 'id': dic[name],
+                            'image_id': int(dic[name]),
+                            'category_id': coco_clsid2catid[int(box[0])] \
+                                if use_coco_category else int(box[0] + 1),
+                            # 'file_name': name,
+                            'bbox': [box[2], box[3], box[4] - box[2],
+                                box[5] - box[3]],  # xyxy -> xywh
+                            'score': box[1],
+                            'area': (box[4] - box[2]) * (box[5] - box[3])}])
 
             if 'masks' in results:
                 import pycocotools.mask as mask_util
@@ -823,8 +851,7 @@ def load_predictor(model_dir,
                    cpu_threads=1,
                    enable_mkldnn=False,
                    enable_mkldnn_bfloat16=False,
-                   delete_shuffle_pass=False,
-                   tuned_trt_shape_file="shape_range_info.pbtxt"):
+                   delete_shuffle_pass=False):
     """set AnalysisConfig, generate AnalysisPredictor
     Args:
         model_dir (str): root path of __model__ and __params__
@@ -868,7 +895,7 @@ def load_predictor(model_dir,
     elif device == 'NPU':
         if config.lite_engine_enabled():
             config.enable_lite_engine()
-        config.enable_custom_device('npu')
+        config.enable_npu()
     else:
         config.disable_gpu()
         config.set_cpu_math_library_num_threads(cpu_threads)
@@ -891,8 +918,6 @@ def load_predictor(model_dir,
         'trt_fp16': Config.Precision.Half
     }
     if run_mode in precision_map.keys():
-        if arch in TUNED_TRT_DYNAMIC_MODELS:
-            config.collect_shape_range_info(tuned_trt_shape_file)
         config.enable_tensorrt_engine(
             workspace_size=(1 << 25) * batch_size,
             max_batch_size=batch_size,
@@ -900,9 +925,13 @@ def load_predictor(model_dir,
             precision_mode=precision_map[run_mode],
             use_static=False,
             use_calib_mode=trt_calib_mode)
-        if arch in TUNED_TRT_DYNAMIC_MODELS:
-            config.enable_tuned_tensorrt_dynamic_shape(tuned_trt_shape_file,
-                                                       True)
+        if FLAGS.collect_trt_shape_info:
+            config.collect_shape_range_info(FLAGS.tuned_trt_shape_file)
+        elif os.path.exists(FLAGS.tuned_trt_shape_file):
+            print(f'Use dynamic shape file: '
+                  f'{FLAGS.tuned_trt_shape_file} for TRT...')
+            config.enable_tuned_tensorrt_dynamic_shape(
+                FLAGS.tuned_trt_shape_file, True)
 
         if use_dynamic_shape:
             min_input_shape = {

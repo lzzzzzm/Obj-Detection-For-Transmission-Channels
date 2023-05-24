@@ -18,12 +18,26 @@
 
 converter to coco
 ```python
-python .\tools\x2coco.py --dataset_type voc --voc_anno_dir .\dataset\channel_transmission\ --voc_anno_list .\dataset\channel_transmission\train.txt --voc_label_list .\dataset\channel_transmission\label_list.txt --voc_out_name ./dataset/channel_transmission/annotations/train.json
+!python tools/x2coco.py \
+    --dataset_type voc \
+    --voc_anno_dir dataset/channel_transmission \
+    --voc_anno_list dataset/channel_transmission/train.txt \
+    --voc_label_list dataset/channel_transmission/label_list.txt \
+    --voc_out_name dataset/channel_transmission/annotations/train.json
 ```
 ```python
-python .\tools\x2coco.py --dataset_type voc --voc_anno_dir .\dataset\channel_transmission\ --voc_anno_list .\dataset\channel_transmission\valid.txt --voc_label_list .\dataset\channel_transmission\label_list.txt --voc_out_name ./dataset/channel_transmission/annotations/val.json
+!python tools/x2coco.py \
+    --dataset_type voc \
+    --voc_anno_dir dataset/channel_transmission \
+    --voc_anno_list dataset/channel_transmission/train.txt \
+    --voc_label_list dataset/channel_transmission/label_list.txt \
+    --voc_out_name dataset/channel_transmission/annotations/train.json
 ```
 
+## Infer & Output json results
+```python
+python tools/infer.py --imagepath2id .\dataset\val\val_imgID.txt --weights .\best_model.pdparams --infer_dir .\dataset\val\val\ --output_dir output --submit_output_dir submit --config .\configs\ppyoloe\voc\ppyoloe_plus_crn_s_30e_voc.yml
+```
 
 
 
