@@ -34,9 +34,14 @@ converter to coco
     --voc_out_name dataset/channel_transmission/annotations/train.json
 ```
 
+## output model
+```python
+!python tools/export_model.py -c configs/dino/dino_r50_4scale_2x_coco.yml --output_dir=./inference_model -o weights=output/dino_r50_4scale_2x_coco/best_model
+```
+
 ## Infer & Output json results
 ```python
-python tools/infer.py --imagepath2id .\dataset\val\val_imgID.txt --weights .\best_model.pdparams --infer_dir .\dataset\val\val\ --output_dir output --submit_output_dir submit --config .\configs\ppyoloe\voc\ppyoloe_plus_crn_s_30e_voc.yml
+!python deploy/python/infer.py --model_dir=inference_model/dino_r50_4scale_2x_coco --image_dir=dataset/val/ --device=GPU --output_dir infer_output --save_results
 ```
 
 
