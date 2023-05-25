@@ -1055,14 +1055,12 @@ class Trainer(object):
                         if score < draw_threshold:
                             continue
                         x, y, w, h = bbox
-                        # xcenter = xmin + w/2
-                        # ycenter = ymin + h/2
                         area = w*h
                         json_dict = {
                             'iscrowd':0,
                             'id':bbox_id,
                             'image_id':imagepath2id[image_name],
-                            'category_id':int(catid)+1,
+                            'category_id':int(catid),
                             'bbox':[x, y, w, h],
                             'score': 1,
                             'area':area

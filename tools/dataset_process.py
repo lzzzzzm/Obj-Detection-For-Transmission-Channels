@@ -1,6 +1,7 @@
 import os
 import shutil
 import argparse
+import numpy as np
 import cv2 as cv
 import xml.dom.minidom as xmldom
 
@@ -10,6 +11,94 @@ from ppdet.utils.logger import setup_logger
 
 logger = setup_logger('dataset prepare')
 
+class Resize():
+    def __init__(self, target_size, keep_ratio, interp=cv.INTER_LINEAR):
+        """
+        Resize image to target size. if keep_ratio is True,
+        resize the image's long side to the maximum of target_size
+        if keep_ratio is False, resize the image to target size(h, w)
+        Args:
+            target_size (int|list): image target size
+            keep_ratio (bool): whether keep_ratio or not, default true
+            interp (int): the interpolation method
+        """
+        super(Resize, self).__init__()
+        self.keep_ratio = keep_ratio
+        self.interp = interp
+        self.target_size = target_size
+
+    def apply_image(self, image, scale):
+        im_scale_x, im_scale_y = scale
+
+        return cv.resize(
+            image,
+            None,
+            None,
+            fx=im_scale_x,
+            fy=im_scale_y,
+            interpolation=self.interp)
+
+    def apply_bbox(self, bbox, scale, size):
+        im_scale_x, im_scale_y = scale
+        resize_w, resize_h = size
+        bbox[:, 0::2] *= im_scale_x
+        bbox[:, 1::2] *= im_scale_y
+        bbox[:, 0::2] = np.clip(bbox[:, 0::2], 0, resize_w)
+        bbox[:, 1::2] = np.clip(bbox[:, 1::2], 0, resize_h)
+        return bbox
+
+    def apply_area(self, area, scale):
+        im_scale_x, im_scale_y = scale
+        return area * im_scale_x * im_scale_y
+
+
+    def __call__(self, im, bbox):
+        """ Resize the image numpy.
+        """
+        if not isinstance(im, np.ndarray):
+            raise TypeError("{}: image type is not numpy.".format(self))
+
+        # apply image
+        if len(im.shape) == 3:
+            im_shape = im.shape
+        else:
+            im_shape = im[0].shape
+
+        if self.keep_ratio:
+            im_size_min = np.min(im_shape[0:2])
+            im_size_max = np.max(im_shape[0:2])
+
+            target_size_min = np.min(self.target_size)
+            target_size_max = np.max(self.target_size)
+
+            im_scale = min(target_size_min / im_size_min,
+                           target_size_max / im_size_max)
+
+            resize_h = int(im_scale * float(im_shape[0]) + 0.5)
+            resize_w = int(im_scale * float(im_shape[1]) + 0.5)
+
+            im_scale_x = im_scale
+            im_scale_y = im_scale
+        else:
+            resize_h, resize_w = self.target_size
+            im_scale_y = resize_h / im_shape[0]
+            im_scale_x = resize_w / im_shape[1]
+
+        if len(im.shape) == 3:
+            im = self.apply_image(im, [im_scale_x, im_scale_y])
+            # im = im.astype(np.float32)
+        else:
+            resized_images = []
+            for one_im in im:
+                applied_im = self.apply_image(one_im, [im_scale_x, im_scale_y])
+                resized_images.append(applied_im)
+
+            im = np.array(resized_images)
+
+        bbox = self.apply_bbox(bbox,
+                            [im_scale_x, im_scale_y],
+                            [resize_w, resize_h])
+        return im, bbox
 
 def make_dataset_dir(dataset_root):
     data_root = os.path.join(dataset_root, 'channel_transmission')
@@ -39,6 +128,8 @@ def make_coco(voc_root):
 
 
 def split_dataset(dataset_root, count=False, make_coco=False):
+    resize_op = Resize(target_size=[800, 1333], keep_ratio=True)
+
     train_dir = os.path.join(dataset_root, 'train')
     file_list = os.listdir(train_dir)
     imgs_list = []
@@ -138,29 +229,36 @@ def split_dataset(dataset_root, count=False, make_coco=False):
             bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
             bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
             bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
-            w = img.shape[1]
-            h = img.shape[0]
-            resize_ratio_w = w / 1024
-            resize_ratio_h = h / 1024
-            xmin = int(xmin / resize_ratio_w)
-            xmax = int(xmax / resize_ratio_w)
-            ymin = int(ymin / resize_ratio_h)
-            ymax = int(ymax / resize_ratio_h)
-            if img.shape[0] > 1024 and img.shape[1] > 1024:
-                bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
-                bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
-                bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
-                bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
-        if img.shape[0] > 1024 and img.shape[1] > 1024:
-            size.getElementsByTagName("width")[0].childNodes[0].data = 1024
-            size.getElementsByTagName("height")[0].childNodes[0].data = 1024
-            img = cv.resize(img, (1024, 1024))
+            # w = img.shape[1]
+            # h = img.shape[0]
+            # resize_ratio_w = w / 1024
+            # resize_ratio_h = h / 1024
+            # xmin = int(xmin / resize_ratio_w)
+            # xmax = int(xmax / resize_ratio_w)
+            # ymin = int(ymin / resize_ratio_h)
+            # ymax = int(ymax / resize_ratio_h)
+            # if img.shape[0] > 1024 and img.shape[1] > 1024:
+            #     bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
+            #     bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
+            #     bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
+            #     bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
+        if img.shape[0] > 800 and img.shape[1] > 1333:
+            bbox = np.array([[xmin, ymin, xmax, ymax]], dtype=np.float)
+            img, bbox = resize_op(img, bbox)
+            xmin, ymin, xmax, ymax = int(bbox[0][0]), int(bbox[0][1]), int(bbox[0][2]), int(bbox[0][3])
+            bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
+            bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
+            bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
+            bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
+            size.getElementsByTagName("width")[0].childNodes[0].data = 1333
+            size.getElementsByTagName("height")[0].childNodes[0].data = 800
+            # img = cv.resize(img, (1024, 1024))
+            # cv.rectangle(img, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (255, 0, 0))
+            # cv.imshow('img', img)
+            # cv.waitKey()
 
         with open(xml_copy_to, 'w', encoding='utf-8') as f:
             xml_file.writexml(f, encoding='utf-8')
-            # cv.rectangle(img, (xmin, ymin), (xmax, ymax), color=(255, 0, 0))
-            # cv.imshow('img', img)
-            # cv.waitKey()
         cv.imwrite(img_copy_to, img)
     logger.info('VOC dataset has been done!')
 
