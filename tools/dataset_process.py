@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import cv2 as cv
 import xml.dom.minidom as xmldom
+from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
 
@@ -102,32 +103,21 @@ class Resize():
 
 def make_dataset_dir(dataset_root):
     data_root = os.path.join(dataset_root, 'channel_transmission')
-    images_dir = os.path.join(data_root, 'images')
+    train_images_dir = os.path.join(data_root, 'train_images')
+    val_images_dir = os.path.join(data_root, 'val_images')
     annotations_dir = os.path.join(data_root, 'annotations')
-    if not os.path.exists(images_dir):
-        logger.info('making {} dir'.format(images_dir))
-        os.mkdir(images_dir)
+    if not os.path.exists(train_images_dir):
+        logger.info('making {} dir'.format(train_images_dir))
+        os.mkdir(train_images_dir)
+    if not os.path.exists(val_images_dir):
+        logger.info('making {} dir'.format(val_images_dir))
+        os.mkdir(val_images_dir)
     if not os.path.exists(annotations_dir):
         logger.info('making {} dir'.format(annotations_dir))
         os.mkdir(annotations_dir)
 
 
-def make_coco(voc_root):
-    coco_dir = os.path.join(voc_root, 'coco')
-    annotations_dir = os.path.join(coco_dir, 'annotations')
-    images_dir = os.path.join(coco_dir, 'images')
-    if not os.path.exists(coco_dir):
-        logger.info('making {} dir'.format(coco_dir))
-        os.mkdir(coco_dir)
-    if not os.path.exists(annotations_dir):
-        logger.info('making {} dir'.format(annotations_dir))
-        os.mkdir(annotations_dir)
-    if not os.path.exists(images_dir):
-        logger.info('making {} dir'.format(images_dir))
-        os.mkdir(images_dir)
-
-
-def split_dataset(dataset_root, count=False, make_coco=False):
+def split_dataset(dataset_root):
     resize_op = Resize(target_size=[800, 1333], keep_ratio=True)
 
     train_dir = os.path.join(dataset_root, 'train')
@@ -153,8 +143,6 @@ def split_dataset(dataset_root, count=False, make_coco=False):
             xml_file.writexml(f, encoding='utf-8')
     logger.info('xml filename correct!')
 
-    if count:
-        pass
 
     logger.info('nest category number : {}'.format(len(category_list['nest'])))
     logger.info('kite category number : {}'.format(len(category_list['kite'])))
@@ -185,29 +173,28 @@ def split_dataset(dataset_root, count=False, make_coco=False):
     # # main_dir = os.path.join(voc_root, 'voc','VOCdevkit', 'VOC2007', 'ImageSets', 'Main')
     data_root = os.path.join(dataset_root, 'channel_transmission')
     train_txt_path = os.path.join(data_root, 'train.txt')
-    val_txt_path = os.path.join(data_root, 'valid.txt')
+    val_txt_path = os.path.join(data_root, 'val.txt')
 
     with open(train_txt_path, 'w+') as f:
         for img_name, xml_name in zip(img_train, xml_train):
-            img_name = os.path.join('./images', img_name)
+            img_name = os.path.join('./train_images', img_name)
             xml_name = os.path.join('./annotations', xml_name)
             f.writelines(img_name + ' ' + xml_name + '\n')
 
     with open(val_txt_path, 'w+') as f:
         for img_name, xml_name in zip(img_val, xml_val):
-            img_name = os.path.join('./images', img_name)
+            img_name = os.path.join('./val_images', img_name)
             xml_name = os.path.join('./annotations', xml_name)
             f.writelines(img_name + ' ' + xml_name + '\n')
 
-    for img_name, xml_name in zip(imgs_list, xmls_list):
+    for img_name, xml_name in tqdm(zip(img_train, xml_train), total=len(img_train)):
         img_path = os.path.join(train_dir, img_name)
-        img_copy_to = os.path.join(data_root, 'images', img_name)
+        img_copy_to = os.path.join(data_root, 'train_images', img_name)
         xml_path = os.path.join(train_dir, xml_name)
         xml_copy_to = os.path.join(data_root, 'annotations', xml_name)
         img = cv.imread(img_path)
         xml_file = xmldom.parse(xml_path)
         eles = xml_file.documentElement
-        size = eles.getElementsByTagName('size')[0]
         object = eles.getElementsByTagName("object")
         for obj in object:
             bndbox = obj.getElementsByTagName('bndbox')[0]
@@ -229,33 +216,40 @@ def split_dataset(dataset_root, count=False, make_coco=False):
             bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
             bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
             bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
-            # w = img.shape[1]
-            # h = img.shape[0]
-            # resize_ratio_w = w / 1024
-            # resize_ratio_h = h / 1024
-            # xmin = int(xmin / resize_ratio_w)
-            # xmax = int(xmax / resize_ratio_w)
-            # ymin = int(ymin / resize_ratio_h)
-            # ymax = int(ymax / resize_ratio_h)
-            # if img.shape[0] > 1024 and img.shape[1] > 1024:
-            #     bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
-            #     bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
-            #     bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
-            #     bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
-        if img.shape[0] > 800 and img.shape[1] > 1333:
-            bbox = np.array([[xmin, ymin, xmax, ymax]], dtype=np.float)
-            img, bbox = resize_op(img, bbox)
-            xmin, ymin, xmax, ymax = int(bbox[0][0]), int(bbox[0][1]), int(bbox[0][2]), int(bbox[0][3])
+
+        with open(xml_copy_to, 'w', encoding='utf-8') as f:
+            xml_file.writexml(f, encoding='utf-8')
+        cv.imwrite(img_copy_to, img)
+
+    for img_name, xml_name in tqdm(zip(img_val, xml_val), total=len(img_val)):
+        img_path = os.path.join(train_dir, img_name)
+        img_copy_to = os.path.join(data_root, 'val_images', img_name)
+        xml_path = os.path.join(train_dir, xml_name)
+        xml_copy_to = os.path.join(data_root, 'annotations', xml_name)
+        img = cv.imread(img_path)
+        xml_file = xmldom.parse(xml_path)
+        eles = xml_file.documentElement
+        object = eles.getElementsByTagName("object")
+        for obj in object:
+            bndbox = obj.getElementsByTagName('bndbox')[0]
+            xmin = int(bndbox.getElementsByTagName('xmin')[0].childNodes[0].data)
+            ymin = int(bndbox.getElementsByTagName('ymin')[0].childNodes[0].data)
+            xmax = int(bndbox.getElementsByTagName('xmax')[0].childNodes[0].data)
+            ymax = int(bndbox.getElementsByTagName('ymax')[0].childNodes[0].data)
+            if xmin > xmax:
+                logger.info('invalid xml file:{} xmin:{} while xmax:{}'.format(img_path, xmin, xmax))
+                t = xmax
+                xmax = xmin
+                xmin = t
+            if ymin > ymax:
+                logger.info('invalid xml file:{} ymin:{} while ymax:{}'.format(img_path, ymin, ymax))
+                t = ymax
+                ymax = ymin
+                ymin = t
             bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
             bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
             bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
             bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
-            size.getElementsByTagName("width")[0].childNodes[0].data = 1333
-            size.getElementsByTagName("height")[0].childNodes[0].data = 800
-            # img = cv.resize(img, (1024, 1024))
-            # cv.rectangle(img, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (255, 0, 0))
-            # cv.imshow('img', img)
-            # cv.waitKey()
 
         with open(xml_copy_to, 'w', encoding='utf-8') as f:
             xml_file.writexml(f, encoding='utf-8')
@@ -270,14 +264,6 @@ def parse_args():
         type=str,
         default='../dataset',
         help="Directory for images to perform inference on.")
-    parser.add_argument(
-        "--count",
-        action='store_true',
-        help="Directory for images to perform inference on.")
-    parser.add_argument(
-        "--make_coco",
-        action='store_true',
-        help="Directory for images to perform inference on.")
     args = parser.parse_args()
     return args
 
@@ -285,4 +271,4 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     make_dataset_dir(args.dataset_root)
-    split_dataset(args.dataset_root, args.count, args.make_coco)
+    split_dataset(args.dataset_root)

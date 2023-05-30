@@ -1,5 +1,5 @@
 architecture: DETR
-pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/ResNet50_cos_pretrained.pdparams
+pretrain_weights: https://paddledet.bj.bcebos.com/models/dino_r50_4scale_2x_coco.pdparams
 hidden_dim: 256
 use_focal_loss: True
 

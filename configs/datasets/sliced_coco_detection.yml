@@ -1,0 +1,21 @@
+metric: COCO
+num_classes: 4
+
+TrainDataset:
+  name: COCODataSet
+  image_dir: images_sliced/train_images_640_025
+  anno_path: sliced_annotations/train_640_025.json
+  dataset_dir: dataset/channel_transmission
+  data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd']
+
+EvalDataset:
+  name: COCODataSet
+  image_dir: images_sliced/val_images_640_025
+  anno_path: sliced_annotations/val_640_025.json
+  dataset_dir: dataset/channel_transmission
+  allow_empty: true
+
+TestDataset:
+  name: ImageFolder
+  anno_path: sliced_annotations/val_640_025.json # also support txt (like VOC's label_list.txt)
+  dataset_dir: dataset/channel_transmission # if set, anno_path will be 'dataset_dir/anno_path'

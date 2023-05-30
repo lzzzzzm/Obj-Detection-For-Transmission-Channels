@@ -3,17 +3,25 @@ num_classes: 4
 
 TrainDataset:
   name: COCODataSet
-  image_dir: images
+  image_dir: train_images
   anno_path: annotations/train.json
   dataset_dir: dataset/channel_transmission
   data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd']
 
 EvalDataset:
   name: COCODataSet
-  image_dir: images
+  image_dir: val_images
   anno_path: annotations/val.json
   dataset_dir: dataset/channel_transmission
   allow_empty: true
+
+#EvalDataset:
+#  !SlicedCOCODataSet
+#    image_dir: images
+#    anno_path: annotations/val.json
+#    dataset_dir: dataset/channel_transmission
+#    sliced_size: [640, 640]
+#    overlap_ratio: [0.25, 0.25]
 
 TestDataset:
   name: ImageFolder

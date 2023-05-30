@@ -37,12 +37,13 @@ def visualize_results(image,
                       pose3d_res,
                       im_id,
                       catid2name,
-                      threshold=0.5):
+                      threshold=0.5,
+                      draw_one=False):
     """
     Visualize bbox and mask results
     """
     if bbox_res is not None:
-        image = draw_bbox(image, im_id, catid2name, bbox_res, threshold)
+        image = draw_bbox(image, im_id, catid2name, bbox_res, threshold, draw_one)
     if mask_res is not None:
         image = draw_mask(image, im_id, mask_res, threshold)
     if segm_res is not None:
@@ -81,7 +82,7 @@ def draw_mask(image, im_id, segms, threshold, alpha=0.7):
     return Image.fromarray(img_array.astype('uint8'))
 
 
-def draw_bbox(image, im_id, catid2name, bboxes, threshold):
+def draw_bbox(image, im_id, catid2name, bboxes, threshold, draw_one):
     """
     Draw bbox on image
     """
@@ -93,8 +94,9 @@ def draw_bbox(image, im_id, catid2name, bboxes, threshold):
         if im_id != dt['image_id']:
             continue
         catid, bbox, score = dt['category_id'], dt['bbox'], dt['score']
-        if score < threshold:
-            continue
+        if not draw_one:
+            if score < threshold:
+                continue
 
         if catid not in catid2color:
             idx = np.random.randint(len(color_list))
@@ -110,13 +112,13 @@ def draw_bbox(image, im_id, catid2name, bboxes, threshold):
             draw.line(
                 [(xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin),
                  (xmin, ymin)],
-                width=3,
+                width=2,
                 fill=color)
         elif len(bbox) == 8:
             x1, y1, x2, y2, x3, y3, x4, y4 = bbox
             draw.line(
                 [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)],
-                width=3,
+                width=2,
                 fill=color)
             xmin = min(x1, x2, x3, x4)
             ymin = min(y1, y2, y3, y4)
@@ -129,6 +131,8 @@ def draw_bbox(image, im_id, catid2name, bboxes, threshold):
         draw.rectangle(
             [(xmin + 1, ymin - th), (xmin + tw + 1, ymin)], fill=color)
         draw.text((xmin + 1, ymin - th), text, fill=(255, 255, 255))
+        if draw_one:
+            break
 
     return image
 

@@ -45,8 +45,8 @@ def parse_args():
     parser.add_argument(
         "--imagepath2id",
         type=str,
-        default='../dataset/val/val_imgID.txt',
-        help="model weights.")
+        default=None,
+        help="imagepath2id.")
     parser.add_argument(
         "--weights",
         type=str,
@@ -54,8 +54,7 @@ def parse_args():
         help="model weights.")
     parser.add_argument(
         "--infer_dir",
-        type=str,
-        default='../dataset/val/val',
+        default=None,
         help="Directory for images to perform inference on.")
     parser.add_argument(
         "--infer_img",
@@ -76,6 +75,11 @@ def parse_args():
         "--draw_threshold",
         type=float,
         default=0.2,
+        help="Threshold to reserve the result for visualization.")
+    parser.add_argument(
+        "--draw_one",
+        type=bool,
+        default=False,
         help="Threshold to reserve the result for visualization.")
     parser.add_argument(
         "--slim_config",
@@ -106,7 +110,7 @@ def parse_args():
         '--slice_size',
         nargs='+',
         type=int,
-        default=[640, 640],
+        default=[1024, 1024],
         help="Height of the sliced image.")
     parser.add_argument(
         "--overlap_ratio",
@@ -191,7 +195,10 @@ def run(FLAGS, cfg):
             draw_threshold=FLAGS.draw_threshold,
             output_dir=FLAGS.output_dir,
             save_results=FLAGS.save_results,
-            visualize=FLAGS.visualize)
+            visualize=FLAGS.visualize,
+            img2ID=FLAGS.imagepath2id,
+            submit_dir=FLAGS.submit_output_dir,
+            draw_one=FLAGS.draw_one)
     else:
         trainer.predict(
             images,
@@ -200,7 +207,8 @@ def run(FLAGS, cfg):
             save_results=FLAGS.save_results,
             visualize=FLAGS.visualize,
             img2ID=FLAGS.imagepath2id,
-            submit_dir=FLAGS.submit_output_dir)
+            submit_dir=FLAGS.submit_output_dir,
+            draw_one=FLAGS.draw_one)
 
 
 def main():

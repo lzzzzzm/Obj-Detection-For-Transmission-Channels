@@ -126,8 +126,7 @@ class ATSSAssigner(nn.Layer):
             assigned_bboxes = paddle.zeros([batch_size, num_anchors, 4])
             assigned_scores = paddle.zeros(
                 [batch_size, num_anchors, self.num_classes])
-            mask_positive = paddle.zeros([batch_size, 1, num_anchors])
-            return assigned_labels, assigned_bboxes, assigned_scores, mask_positive
+            return assigned_labels, assigned_bboxes, assigned_scores
 
         # 1. compute iou between gt and anchor bbox, [B, n, L]
         ious = iou_similarity(gt_bboxes.reshape([-1, 4]), anchor_bboxes)
@@ -170,8 +169,9 @@ class ATSSAssigner(nn.Layer):
         # the one with the highest iou will be selected.
         mask_positive_sum = mask_positive.sum(axis=-2)
         if mask_positive_sum.max() > 1:
-            mask_multiple_gts = (mask_positive_sum.unsqueeze(1) > 1).tile(
-                [1, num_max_boxes, 1])
+            mask_multiple_gts = (
+                mask_positive_sum.unsqueeze(1) > 1).astype('int32').tile(
+                    [1, num_max_boxes, 1]).astype('bool')
             if self.sm_use:
                 is_max_iou = compute_max_iou_anchor(ious * mask_positive)
             else:
@@ -222,4 +222,4 @@ class ATSSAssigner(nn.Layer):
                                          paddle.zeros_like(gather_scores))
             assigned_scores *= gather_scores.unsqueeze(-1)
 
-        return assigned_labels, assigned_bboxes, assigned_scores, mask_positive
+        return assigned_labels, assigned_bboxes, assigned_scores

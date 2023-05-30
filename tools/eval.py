@@ -138,7 +138,6 @@ def run(FLAGS, cfg):
 
     # build trainer
     trainer = Trainer(cfg, mode='eval')
-
     # load weights
     trainer.load_weights(cfg.weights)
 

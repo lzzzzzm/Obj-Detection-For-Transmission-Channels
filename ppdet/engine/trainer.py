@@ -18,10 +18,10 @@ from __future__ import print_function
 
 import os
 import sys
-import json
 import copy
 import time
 from tqdm import tqdm
+import json
 
 import numpy as np
 import typing
@@ -39,8 +39,8 @@ from ppdet.optimizer import ModelEMA
 from ppdet.core.workspace import create
 from ppdet.utils.checkpoint import load_weight, load_pretrain_weight
 from ppdet.utils.visualizer import visualize_results, save_result
-from ppdet.metrics import Metric, COCOMetric, VOCMetric, WiderFaceMetric, get_infer_results, KeyPointTopDownCOCOEval, KeyPointTopDownMPIIEval, Pose3DEval
-from ppdet.metrics import RBoxMetric, JDEDetMetric, SNIPERCOCOMetric
+from ppdet.metrics import get_infer_results, KeyPointTopDownCOCOEval, KeyPointTopDownCOCOWholeBadyHandEval, KeyPointTopDownMPIIEval, Pose3DEval
+from ppdet.metrics import Metric, COCOMetric, VOCMetric, WiderFaceMetric, RBoxMetric, JDEDetMetric, SNIPERCOCOMetric
 from ppdet.data.source.sniper_coco import SniperCOCODataSet
 from ppdet.data.source.category import get_categories
 import ppdet.utils.stats as stats
@@ -349,6 +349,19 @@ class Trainer(object):
                     self.cfg.save_dir,
                     save_prediction_only=save_prediction_only)
             ]
+        elif self.cfg.metric == 'KeyPointTopDownCOCOWholeBadyHandEval':
+            eval_dataset = self.cfg['EvalDataset']
+            eval_dataset.check_or_download_dataset()
+            anno_file = eval_dataset.get_anno()
+            save_prediction_only = self.cfg.get('save_prediction_only', False)
+            self._metrics = [
+                KeyPointTopDownCOCOWholeBadyHandEval(
+                    anno_file,
+                    len(eval_dataset),
+                    self.cfg.num_joints,
+                    self.cfg.save_dir,
+                    save_prediction_only=save_prediction_only)
+            ]
         elif self.cfg.metric == 'KeyPointTopDownMPIIEval':
             eval_dataset = self.cfg['EvalDataset']
             eval_dataset.check_or_download_dataset()
@@ -395,11 +408,11 @@ class Trainer(object):
                     "metrics shoule be instances of subclass of Metric"
         self._metrics.extend(metrics)
 
-    def load_weights(self, weights):
+    def load_weights(self, weights, ARSL_eval=False):
         if self.is_loaded_weights:
             return
         self.start_epoch = 0
-        load_pretrain_weight(self.model, weights)
+        load_pretrain_weight(self.model, weights, ARSL_eval)
         logger.debug("Load weights {} to start training".format(weights))
 
     def load_weights_sde(self, det_weights, reid_weights):
@@ -430,10 +443,8 @@ class Trainer(object):
         model = self.model
         if self.cfg.get('to_static', False):
             model = apply_to_static(self.cfg, model)
-        sync_bn = (
-            getattr(self.cfg, 'norm_type', None) == 'sync_bn' and
-            (self.cfg.use_gpu or self.cfg.use_npu or self.cfg.use_mlu) and
-            self._nranks > 1)
+        sync_bn = (getattr(self.cfg, 'norm_type', None) == 'sync_bn' and
+                   (self.cfg.use_gpu or self.cfg.use_mlu) and self._nranks > 1)
         if sync_bn:
             model = paddle.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
@@ -474,6 +485,7 @@ class Trainer(object):
 
         use_fused_allreduce_gradients = self.cfg[
             'use_fused_allreduce_gradients'] if 'use_fused_allreduce_gradients' in self.cfg else False
+
         for epoch_id in range(self.start_epoch, self.cfg.epoch):
             self.status['mode'] = 'train'
             self.status['epoch_id'] = epoch_id
@@ -487,6 +499,9 @@ class Trainer(object):
                 profiler.add_profiler_step(profiler_options)
                 self._compose_callback.on_step_begin(self.status)
                 data['epoch_id'] = epoch_id
+                if self.cfg.get('to_static',
+                                False) and 'image_file' in data.keys():
+                    data.pop('image_file')
 
                 if self.use_amp:
                     if isinstance(
@@ -770,13 +785,24 @@ class Trainer(object):
                       draw_threshold=0.5,
                       output_dir='output',
                       save_results=False,
-                      visualize=True):
+                      img2ID=None,
+                      submit_dir=None,
+                      visualize=True,
+                      draw_one=False):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
         self.dataset.set_slice_images(images, slice_size, overlap_ratio)
         loader = create('TestReader')(self.dataset, 0)
         imid2path = self.dataset.get_imid2path()
+        if img2ID is not None:
+            imagepath2id = {}
+            with open(img2ID, 'r') as f:
+                for line in f.readlines():
+                    line = line.strip('\n')
+                    file_name = line[-43:-3]
+                    id = line[8:19]
+                    imagepath2id[file_name] = int(id)
 
         def setup_metrics_for_loader():
             # mem
@@ -820,7 +846,7 @@ class Trainer(object):
         clsid2catid, catid2name = get_categories(
             self.cfg.metric, anno_file=anno_file)
 
-        # Run Infer 
+        # Run Infer
         self.status['mode'] = 'test'
         self.model.eval()
         if self.cfg.get('print_flops', False):
@@ -878,6 +904,7 @@ class Trainer(object):
             _m.accumulate()
             _m.reset()
 
+        json_results = []
         if visualize:
             for outs in results:
                 batch_res = get_infer_results(outs, clsid2catid)
@@ -886,6 +913,8 @@ class Trainer(object):
                 start = 0
                 for i, im_id in enumerate(outs['im_id']):
                     image_path = imid2path[int(im_id)]
+                    image_name = image_path[image_path.rfind('/')+1:]
+                    image_name = image_name.replace('.jpg', '')
                     image = Image.open(image_path).convert('RGB')
                     image = ImageOps.exif_transpose(image)
                     self.status['original_image'] = np.array(image.copy())
@@ -901,9 +930,33 @@ class Trainer(object):
                             if 'keypoint' in batch_res else None
                     pose3d_res = batch_res['pose3d'][start:end] \
                             if 'pose3d' in batch_res else None
+                    bbox_id = 0
+                    bbox_res = sorted(bbox_res, key=lambda x:x['score'], reverse=True)
+                    for dt in np.array(bbox_res):
+                        if im_id != dt['image_id']:
+                            continue
+                        catid, bbox, score = dt['category_id'], dt['bbox'], dt['score']
+                        if not draw_one:
+                            if score < draw_threshold:
+                                continue
+                        x, y, w, h = bbox
+                        area = w*h
+                        json_dict = {
+                            'iscrowd':0,
+                            'id':bbox_id,
+                            'image_id':imagepath2id[image_name],
+                            'category_id':int(catid),
+                            'bbox':[x, y, w, h],
+                            'score': 1,
+                            'area':area
+                        }
+                        json_results.append(json_dict)
+                        bbox_id = bbox_id + 1
+                        if draw_one:
+                            break
                     image = visualize_results(
                         image, bbox_res, mask_res, segm_res, keypoint_res,
-                        pose3d_res, int(im_id), catid2name, draw_threshold)
+                        pose3d_res, int(im_id), catid2name, draw_threshold, draw_one)
                     self.status['result_image'] = np.array(image.copy())
                     if self._compose_callback:
                         self._compose_callback.on_step_end(self.status)
@@ -915,6 +968,11 @@ class Trainer(object):
                     image.save(save_name, quality=95)
 
                     start = end
+        # sort json
+        json_results = sorted(json_results, key=lambda x:x['image_id'])
+        with open(os.path.join(submit_dir, 'sliced_results.json'), 'w+', encoding='utf-8') as f:
+            json.dump(json_results,f)
+
 
     def predict(self,
                 images,
@@ -923,7 +981,8 @@ class Trainer(object):
                 save_results=False,
                 visualize=True,
                 img2ID=None,
-                submit_dir='submit'):
+                submit_dir='submit',
+                draw_one=False):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         if not os.path.exists(submit_dir):
@@ -986,7 +1045,7 @@ class Trainer(object):
         clsid2catid, catid2name = get_categories(
             self.cfg.metric, anno_file=anno_file)
 
-        # Run Infer 
+        # Run Infer
         self.status['mode'] = 'test'
         self.model.eval()
         if self.cfg.get('print_flops', False):
@@ -1021,7 +1080,6 @@ class Trainer(object):
             _m.reset()
 
         json_results = []
-
         if visualize:
             for outs in results:
                 batch_res = get_infer_results(outs, clsid2catid)
@@ -1030,7 +1088,7 @@ class Trainer(object):
                 start = 0
                 for i, im_id in enumerate(outs['im_id']):
                     image_path = imid2path[int(im_id)]
-                    image_name = image_path[image_path.rfind('\\')+1:]
+                    image_name = image_path[image_path.rfind('/')+1:]
                     image_name = image_name.replace('.jpg', '')
                     image = Image.open(image_path).convert('RGB')
                     image = ImageOps.exif_transpose(image)
@@ -1048,12 +1106,14 @@ class Trainer(object):
                     pose3d_res = batch_res['pose3d'][start:end] \
                             if 'pose3d' in batch_res else None
                     bbox_id = 0
+                    bbox_res = sorted(bbox_res, key=lambda x:x['score'], reverse=True)
                     for dt in np.array(bbox_res):
                         if im_id != dt['image_id']:
                             continue
                         catid, bbox, score = dt['category_id'], dt['bbox'], dt['score']
-                        if score < draw_threshold:
-                            continue
+                        if not draw_one:
+                            if score < draw_threshold:
+                                continue
                         x, y, w, h = bbox
                         area = w*h
                         json_dict = {
@@ -1067,9 +1127,11 @@ class Trainer(object):
                         }
                         json_results.append(json_dict)
                         bbox_id = bbox_id + 1
+                        if draw_one:
+                            break
                     image = visualize_results(
                         image, bbox_res, mask_res, segm_res, keypoint_res,
-                        pose3d_res, int(im_id), catid2name, draw_threshold)
+                        pose3d_res, int(im_id), catid2name, draw_threshold, draw_one)
                     self.status['result_image'] = np.array(image.copy())
                     if self._compose_callback:
                         self._compose_callback.on_step_end(self.status)

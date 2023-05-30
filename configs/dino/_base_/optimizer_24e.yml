@@ -1,11 +1,13 @@
-epoch: 500
+epoch: 24
+
+snapshot_epoch: 3
 
 LearningRate:
   base_lr: 0.0001
   schedulers:
   - !PiecewiseDecay
     gamma: 0.1
-    milestones: [400]
+    milestones: [20]
     use_warmup: false
 
 OptimizerBuilder:
