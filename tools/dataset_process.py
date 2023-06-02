@@ -117,7 +117,7 @@ def make_dataset_dir(dataset_root):
         os.mkdir(annotations_dir)
 
 
-def split_dataset(dataset_root):
+def split_dataset(dataset_root, resize=False):
     resize_op = Resize(target_size=[800, 1333], keep_ratio=True)
 
     train_dir = os.path.join(dataset_root, 'train')
@@ -216,6 +216,22 @@ def split_dataset(dataset_root):
             bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
             bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
             bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
+        if resize and img.shape[0]==5792 and img.shape[1]==8688:
+            bbox = np.array(
+                [
+                    [xmin, ymin, xmax, ymax]
+                ]
+            , dtype=np.float)
+            img, bbox = resize_op(img, bbox)
+            xmin, ymin, xmax, ymax = int(bbox[0][0]), int(bbox[0][1]), int(bbox[0][2]), int(bbox[0][3])
+            bndbox.getElementsByTagName('xmin')[0].childNodes[0].data = xmin
+            bndbox.getElementsByTagName('ymin')[0].childNodes[0].data = ymin
+            bndbox.getElementsByTagName('xmax')[0].childNodes[0].data = xmax
+            bndbox.getElementsByTagName('ymax')[0].childNodes[0].data = ymax
+            # vis
+            # cv.rectangle(img, (xmin, ymin), (xmax, ymax), (255, 0, 0))
+            # cv.imshow('img', img)
+            # cv.waitKey()
 
         with open(xml_copy_to, 'w', encoding='utf-8') as f:
             xml_file.writexml(f, encoding='utf-8')
@@ -264,6 +280,11 @@ def parse_args():
         type=str,
         default='../dataset',
         help="Directory for images to perform inference on.")
+    parser.add_argument(
+        "--resize",
+        type=bool,
+        default=True,
+        help="Directory for images to perform inference on.")
     args = parser.parse_args()
     return args
 
@@ -271,4 +292,4 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     make_dataset_dir(args.dataset_root)
-    split_dataset(args.dataset_root)
+    split_dataset(args.dataset_root, args.resize)
